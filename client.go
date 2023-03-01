@@ -14,6 +14,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tidwall/gjson"
@@ -48,6 +49,8 @@ type Client struct {
 	BackoffMaxDelay int
 	// Backoff delay factor
 	BackoffDelayFactor float64
+	// Authentication mutex
+	AuthenticationMutex *sync.Mutex
 }
 
 // NewClient creates a new SDWAN HTTP client.
@@ -66,15 +69,16 @@ func NewClient(url, usr, pwd string, insecure bool, mods ...func(*Client)) (Clie
 	}
 
 	client := Client{
-		HttpClient:         &httpClient,
-		Url:                url,
-		Usr:                usr,
-		Pwd:                pwd,
-		Insecure:           insecure,
-		MaxRetries:         DefaultMaxRetries,
-		BackoffMinDelay:    DefaultBackoffMinDelay,
-		BackoffMaxDelay:    DefaultBackoffMaxDelay,
-		BackoffDelayFactor: DefaultBackoffDelayFactor,
+		HttpClient:          &httpClient,
+		Url:                 url,
+		Usr:                 usr,
+		Pwd:                 pwd,
+		Insecure:            insecure,
+		MaxRetries:          DefaultMaxRetries,
+		BackoffMinDelay:     DefaultBackoffMinDelay,
+		BackoffMaxDelay:     DefaultBackoffMaxDelay,
+		BackoffDelayFactor:  DefaultBackoffDelayFactor,
+		AuthenticationMutex: &sync.Mutex{},
 	}
 
 	for _, mod := range mods {
@@ -215,14 +219,20 @@ func (client *Client) Do(req Req) (Res, error) {
 // Results will be the raw data structure as returned by vManage
 func (client *Client) Get(path string, mods ...func(*Req)) (Res, error) {
 	req := client.NewReq("GET", "/dataservice"+path, nil, mods...)
-	client.Authenticate()
+	err := client.Authenticate()
+	if err != nil {
+		return Res{}, err
+	}
 	return client.Do(req)
 }
 
 // Delete makes a DELETE request.
 func (client *Client) Delete(path string, mods ...func(*Req)) (Res, error) {
 	req := client.NewReq("DELETE", "/dataservice"+path, nil, mods...)
-	client.Authenticate()
+	err := client.Authenticate()
+	if err != nil {
+		return Res{}, err
+	}
 	return client.Do(req)
 }
 
@@ -230,7 +240,10 @@ func (client *Client) Delete(path string, mods ...func(*Req)) (Res, error) {
 // Hint: Use the Body struct to easily create POST body data.
 func (client *Client) Post(path, data string, mods ...func(*Req)) (Res, error) {
 	req := client.NewReq("POST", "/dataservice"+path, strings.NewReader(data), mods...)
-	client.Authenticate()
+	err := client.Authenticate()
+	if err != nil {
+		return Res{}, err
+	}
 	return client.Do(req)
 }
 
@@ -238,7 +251,10 @@ func (client *Client) Post(path, data string, mods ...func(*Req)) (Res, error) {
 // Hint: Use the Body struct to easily create PUT body data.
 func (client *Client) Put(path, data string, mods ...func(*Req)) (Res, error) {
 	req := client.NewReq("PUT", "/dataservice"+path, strings.NewReader(data), mods...)
-	client.Authenticate()
+	err := client.Authenticate()
+	if err != nil {
+		return Res{}, err
+	}
 	return client.Do(req)
 }
 
@@ -285,11 +301,13 @@ func (client *Client) Login() error {
 
 // Login if no token available.
 func (client *Client) Authenticate() error {
+	var err error
+	client.AuthenticationMutex.Lock()
 	if client.Token == "" {
-		return client.Login()
-	} else {
-		return nil
+		err = client.Login()
 	}
+	client.AuthenticationMutex.Unlock()
+	return err
 }
 
 // Backoff waits following an exponential backoff algorithm
