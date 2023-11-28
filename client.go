@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"math"
 	"math/rand"
@@ -55,7 +54,8 @@ type Client struct {
 
 // NewClient creates a new SDWAN HTTP client.
 // Pass modifiers in to modify the behavior of the client, e.g.
-//  client, _ := NewClient("vmanage1.cisco.com", "user", "password", true, RequestTimeout(120))
+//
+//	client, _ := NewClient("vmanage1.cisco.com", "user", "password", true, RequestTimeout(120))
 func NewClient(url, usr, pwd string, insecure bool, mods ...func(*Client)) (Client, error) {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: insecure},
@@ -138,21 +138,21 @@ func (client Client) NewReq(method, uri string, body io.Reader, mods ...func(*Re
 // Do makes a request.
 // Requests for Do are built ouside of the client, e.g.
 //
-//  req := client.NewReq("GET", "/admin/resourcegroup", nil)
-//  res, _ := client.Do(req)
+//	req := client.NewReq("GET", "/admin/resourcegroup", nil)
+//	res, _ := client.Do(req)
 func (client *Client) Do(req Req) (Res, error) {
 	// add token
 	req.HttpReq.Header.Add("X-XSRF-TOKEN", client.Token)
 	// retain the request body across multiple attempts
 	var body []byte
 	if req.HttpReq.Body != nil {
-		body, _ = ioutil.ReadAll(req.HttpReq.Body)
+		body, _ = io.ReadAll(req.HttpReq.Body)
 	}
 
 	var res Res
 
 	for attempts := 0; ; attempts++ {
-		req.HttpReq.Body = ioutil.NopCloser(bytes.NewBuffer(body))
+		req.HttpReq.Body = io.NopCloser(bytes.NewBuffer(body))
 		if req.LogPayload {
 			log.Printf("[DEBUG] HTTP Request: %s, %s, %s", req.HttpReq.Method, req.HttpReq.URL, req.HttpReq.Body)
 		} else {
@@ -172,7 +172,7 @@ func (client *Client) Do(req Req) (Res, error) {
 		}
 
 		defer httpRes.Body.Close()
-		bodyBytes, err := ioutil.ReadAll(httpRes.Body)
+		bodyBytes, err := io.ReadAll(httpRes.Body)
 		if err != nil {
 			if ok := client.Backoff(attempts); !ok {
 				log.Printf("[ERROR] Cannot decode response body: %+v", err)
@@ -271,13 +271,13 @@ func (client *Client) Login() error {
 	}
 	if httpRes.StatusCode != 200 {
 		log.Printf("[ERROR] Authentication failed: StatusCode %v", httpRes.StatusCode)
-		return fmt.Errorf("Authentication failed")
+		return fmt.Errorf("authentication failed, status code: %v", httpRes.StatusCode)
 	}
 	defer httpRes.Body.Close()
-	bodyBytes, _ := ioutil.ReadAll(httpRes.Body)
+	bodyBytes, _ := io.ReadAll(httpRes.Body)
 	if len(bodyBytes) > 0 {
 		log.Printf("[ERROR] Authentication failed: Invalid credentials")
-		return fmt.Errorf("Authentication failed")
+		return fmt.Errorf("authentication failed, invalid credentials")
 	}
 	req = client.NewReq("GET", "/dataservice/client/token", nil)
 	httpRes, err = client.HttpClient.Do(req.HttpReq)
@@ -286,13 +286,13 @@ func (client *Client) Login() error {
 	}
 	if httpRes.StatusCode != 200 {
 		log.Printf("[ERROR] Token retrieval failed: StatusCode %v", httpRes.StatusCode)
-		return fmt.Errorf("Authentication failed")
+		return fmt.Errorf("authentication failed, token retrieval, status code: %v", httpRes.StatusCode)
 	}
 	defer httpRes.Body.Close()
-	token, err := ioutil.ReadAll(httpRes.Body)
+	token, _ := io.ReadAll(httpRes.Body)
 	if string(token) == "" {
 		log.Printf("[ERROR] Token retrieval failed: no token in payload")
-		return fmt.Errorf("Authentication failed")
+		return fmt.Errorf("authentication failed, no token in payload")
 	}
 	client.Token = string(token)
 	log.Printf("[DEBUG] Authentication successful")

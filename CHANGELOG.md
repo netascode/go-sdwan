@@ -1,3 +1,7 @@
+## 0.1.3 (unreleased)
+
+- Enhance authentication error messages
+
 ## 0.1.2
 
 - Return an error if authentication fails
