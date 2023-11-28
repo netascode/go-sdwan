@@ -263,40 +263,47 @@ func (client *Client) Login() error {
 	data := url.Values{}
 	data.Set("j_username", client.Usr)
 	data.Set("j_password", client.Pwd)
-	req := client.NewReq("POST", "/j_security_check", strings.NewReader(data.Encode()), NoLogPayload)
-	req.HttpReq.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	httpRes, err := client.HttpClient.Do(req.HttpReq)
-	if err != nil {
-		return err
+	for attempts := 0; ; attempts++ {
+		req := client.NewReq("POST", "/j_security_check", strings.NewReader(data.Encode()), NoLogPayload)
+		req.HttpReq.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+		httpRes, err := client.HttpClient.Do(req.HttpReq)
+		if err != nil {
+			return err
+		}
+		if httpRes.StatusCode != 200 {
+			log.Printf("[ERROR] Authentication failed: StatusCode %v", httpRes.StatusCode)
+			return fmt.Errorf("authentication failed, status code: %v", httpRes.StatusCode)
+		}
+		defer httpRes.Body.Close()
+		bodyBytes, _ := io.ReadAll(httpRes.Body)
+		if len(bodyBytes) > 0 {
+			if ok := client.Backoff(attempts); !ok {
+				log.Printf("[ERROR] Authentication failed: Invalid credentials")
+				return fmt.Errorf("authentication failed, invalid credentials")
+			} else {
+				log.Printf("[ERROR] Authentication failed: %s, retries: %v", err, attempts)
+				continue
+			}
+		}
+		req = client.NewReq("GET", "/dataservice/client/token", nil)
+		httpRes, err = client.HttpClient.Do(req.HttpReq)
+		if err != nil {
+			return err
+		}
+		if httpRes.StatusCode != 200 {
+			log.Printf("[ERROR] Token retrieval failed: StatusCode %v", httpRes.StatusCode)
+			return fmt.Errorf("authentication failed, token retrieval, status code: %v", httpRes.StatusCode)
+		}
+		defer httpRes.Body.Close()
+		token, _ := io.ReadAll(httpRes.Body)
+		if string(token) == "" {
+			log.Printf("[ERROR] Token retrieval failed: no token in payload")
+			return fmt.Errorf("authentication failed, no token in payload")
+		}
+		client.Token = string(token)
+		log.Printf("[DEBUG] Authentication successful")
+		return nil
 	}
-	if httpRes.StatusCode != 200 {
-		log.Printf("[ERROR] Authentication failed: StatusCode %v", httpRes.StatusCode)
-		return fmt.Errorf("authentication failed, status code: %v", httpRes.StatusCode)
-	}
-	defer httpRes.Body.Close()
-	bodyBytes, _ := io.ReadAll(httpRes.Body)
-	if len(bodyBytes) > 0 {
-		log.Printf("[ERROR] Authentication failed: Invalid credentials")
-		return fmt.Errorf("authentication failed, invalid credentials")
-	}
-	req = client.NewReq("GET", "/dataservice/client/token", nil)
-	httpRes, err = client.HttpClient.Do(req.HttpReq)
-	if err != nil {
-		return err
-	}
-	if httpRes.StatusCode != 200 {
-		log.Printf("[ERROR] Token retrieval failed: StatusCode %v", httpRes.StatusCode)
-		return fmt.Errorf("authentication failed, token retrieval, status code: %v", httpRes.StatusCode)
-	}
-	defer httpRes.Body.Close()
-	token, _ := io.ReadAll(httpRes.Body)
-	if string(token) == "" {
-		log.Printf("[ERROR] Token retrieval failed: no token in payload")
-		return fmt.Errorf("authentication failed, no token in payload")
-	}
-	client.Token = string(token)
-	log.Printf("[DEBUG] Authentication successful")
-	return nil
 }
 
 // Login if no token available.

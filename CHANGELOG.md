@@ -1,3 +1,7 @@
+## 0.1.4 (unreleased)
+
+- Retry on specific authentication failures
+
 ## 0.1.3
 
 - Enhance authentication error messages
