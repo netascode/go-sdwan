@@ -1,3 +1,7 @@
+## 0.1.5 (unreleased)
+
+- Handle 429 responses including Retry-After header
+
 ## 0.1.4
 
 - Retry on specific authentication failures

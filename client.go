@@ -196,6 +196,19 @@ func (client *Client) Do(req Req) (Res, error) {
 				log.Printf("[ERROR] HTTP Request failed: StatusCode %v", httpRes.StatusCode)
 				log.Printf("[DEBUG] Exit from Do method")
 				return res, fmt.Errorf("HTTP Request failed: StatusCode %v", httpRes.StatusCode)
+			} else if httpRes.StatusCode == 429 {
+				retryAfter := httpRes.Header.Get("Retry-After")
+				retryAfterDuration := time.Duration(0)
+				if retryAfter == "0" {
+					retryAfterDuration = time.Second
+				} else if retryAfter != "" {
+					retryAfterDuration, _ = time.ParseDuration(retryAfter + "s")
+				} else {
+					retryAfterDuration = 15 * time.Second
+				}
+				log.Printf("[WARNING] HTTP Request rate limited, waiting %v seconds, Retries: %v", retryAfterDuration.Seconds(), attempts)
+				time.Sleep(retryAfterDuration)
+				continue
 			} else if httpRes.StatusCode == 408 || (httpRes.StatusCode >= 500 && httpRes.StatusCode <= 599) {
 				log.Printf("[ERROR] HTTP Request failed: StatusCode %v, Retries: %v", httpRes.StatusCode, attempts)
 				continue
