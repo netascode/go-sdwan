@@ -2,7 +2,7 @@ package sdwan
 
 import (
 	"errors"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"testing"
 	"time"
@@ -87,14 +87,14 @@ func TestClientGet(t *testing.T) {
 		Get("/url").
 		Reply(200).
 		Map(func(res *http.Response) *http.Response {
-			res.Body = ioutil.NopCloser(ErrReader{})
+			res.Body = io.NopCloser(ErrReader{})
 			return res
 		})
 	_, err = client.Get("/url")
 	assert.Error(t, err)
 }
 
-// TestClientDeleteDn tests the Client::Delete method.
+// TestClientDelete tests the Client::Delete method.
 func TestClientDelete(t *testing.T) {
 	defer gock.Off()
 	client := authenticatedTestClient()
@@ -111,6 +111,26 @@ func TestClientDelete(t *testing.T) {
 		Delete("/url").
 		ReplyError(errors.New("fail"))
 	_, err = client.Delete("/url")
+	assert.Error(t, err)
+}
+
+// TestClientDeleteBody tests the Client::Delete method.
+func TestClientDeleteBody(t *testing.T) {
+	defer gock.Off()
+	client := authenticatedTestClient()
+
+	// Success
+	gock.New(testURL).
+		Delete("/url").
+		Reply(200)
+	_, err := client.DeleteBody("/url", "")
+	assert.NoError(t, err)
+
+	// HTTP error
+	gock.New(testURL).
+		Delete("/url").
+		ReplyError(errors.New("fail"))
+	_, err = client.DeleteBody("/url", "")
 	assert.Error(t, err)
 }
 
@@ -141,7 +161,7 @@ func TestClientPost(t *testing.T) {
 		Post("/url").
 		Reply(200).
 		Map(func(res *http.Response) *http.Response {
-			res.Body = ioutil.NopCloser(ErrReader{})
+			res.Body = io.NopCloser(ErrReader{})
 			return res
 		})
 	_, err = client.Post("/url", "{}")
@@ -175,7 +195,7 @@ func TestClientPut(t *testing.T) {
 		Put("/url").
 		Reply(200).
 		Map(func(res *http.Response) *http.Response {
-			res.Body = ioutil.NopCloser(ErrReader{})
+			res.Body = io.NopCloser(ErrReader{})
 			return res
 		})
 	_, err = client.Put("/url", "{}")

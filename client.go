@@ -249,6 +249,17 @@ func (client *Client) Delete(path string, mods ...func(*Req)) (Res, error) {
 	return client.Do(req)
 }
 
+// DeleteBody makes a DELETE request with a payload.
+// Hint: Use the Body struct to easily create DELETE body data.
+func (client *Client) DeleteBody(path, data string, mods ...func(*Req)) (Res, error) {
+	req := client.NewReq("DELETE", "/dataservice"+path, strings.NewReader(data), mods...)
+	err := client.Authenticate()
+	if err != nil {
+		return Res{}, err
+	}
+	return client.Do(req)
+}
+
 // Post makes a POST request and returns a GJSON result.
 // Hint: Use the Body struct to easily create POST body data.
 func (client *Client) Post(path, data string, mods ...func(*Req)) (Res, error) {

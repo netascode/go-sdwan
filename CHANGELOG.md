@@ -1,3 +1,7 @@
+## 0.1.6 (unreleased)
+
+- Add DeleteBody() function
+
 ## 0.1.5
 
 - Handle 429 responses including Retry-After header
