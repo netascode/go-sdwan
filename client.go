@@ -6,7 +6,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"math"
 	"math/rand"
 	"net/http"
@@ -154,19 +154,19 @@ func (client *Client) Do(req Req) (Res, error) {
 	for attempts := 0; ; attempts++ {
 		req.HttpReq.Body = io.NopCloser(bytes.NewBuffer(body))
 		if req.LogPayload {
-			log.Printf("[DEBUG] HTTP Request: %s, %s, %s", req.HttpReq.Method, req.HttpReq.URL, req.HttpReq.Body)
+			slog.Debug(fmt.Sprintf("HTTP Request: %s, %s, %s", req.HttpReq.Method, req.HttpReq.URL, req.HttpReq.Body))
 		} else {
-			log.Printf("[DEBUG] HTTP Request: %s, %s", req.HttpReq.Method, req.HttpReq.URL)
+			slog.Debug(fmt.Sprintf("HTTP Request: %s, %s", req.HttpReq.Method, req.HttpReq.URL))
 		}
 
 		httpRes, err := client.HttpClient.Do(req.HttpReq)
 		if err != nil {
 			if ok := client.Backoff(attempts); !ok {
-				log.Printf("[ERROR] HTTP Connection error occured: %+v", err)
-				log.Printf("[DEBUG] Exit from Do method")
+				slog.Error(fmt.Sprintf("HTTP Connection error occured: %+v", err))
+				slog.Debug("Exit from Do method")
 				return Res{}, err
 			} else {
-				log.Printf("[ERROR] HTTP Connection failed: %s, retries: %v", err, attempts)
+				slog.Error(fmt.Sprintf("HTTP Connection failed: %s, retries: %v", err, attempts))
 				continue
 			}
 		}
@@ -175,26 +175,26 @@ func (client *Client) Do(req Req) (Res, error) {
 		bodyBytes, err := io.ReadAll(httpRes.Body)
 		if err != nil {
 			if ok := client.Backoff(attempts); !ok {
-				log.Printf("[ERROR] Cannot decode response body: %+v", err)
-				log.Printf("[DEBUG] Exit from Do method")
+				slog.Error(fmt.Sprintf("Cannot decode response body: %+v", err))
+				slog.Debug("Exit from Do method")
 				return Res{}, err
 			} else {
-				log.Printf("[ERROR] Cannot decode response body: %s, retries: %v", err, attempts)
+				slog.Error(fmt.Sprintf("Cannot decode response body: %s, retries: %v", err, attempts))
 				continue
 			}
 		}
 		res = Res(gjson.ParseBytes(bodyBytes))
 		if req.LogPayload {
-			log.Printf("[DEBUG] HTTP Response: %s", res.Raw)
+			slog.Debug(fmt.Sprintf("HTTP Response: %s", res.Raw))
 		}
 
 		if httpRes.StatusCode >= 200 && httpRes.StatusCode <= 299 {
-			log.Printf("[DEBUG] Exit from Do method")
+			slog.Debug("Exit from Do method")
 			break
 		} else {
 			if ok := client.Backoff(attempts); !ok {
-				log.Printf("[ERROR] HTTP Request failed: StatusCode %v", httpRes.StatusCode)
-				log.Printf("[DEBUG] Exit from Do method")
+				slog.Error(fmt.Sprintf("HTTP Request failed: StatusCode %v", httpRes.StatusCode))
+				slog.Debug("Exit from Do method")
 				return res, fmt.Errorf("HTTP Request failed: StatusCode %v", httpRes.StatusCode)
 			} else if httpRes.StatusCode == 429 {
 				retryAfter := httpRes.Header.Get("Retry-After")
@@ -206,15 +206,15 @@ func (client *Client) Do(req Req) (Res, error) {
 				} else {
 					retryAfterDuration = 15 * time.Second
 				}
-				log.Printf("[WARNING] HTTP Request rate limited, waiting %v seconds, Retries: %v", retryAfterDuration.Seconds(), attempts)
+				slog.Warn(fmt.Sprintf("HTTP Request rate limited, waiting %v seconds, Retries: %v", retryAfterDuration.Seconds(), attempts))
 				time.Sleep(retryAfterDuration)
 				continue
 			} else if httpRes.StatusCode == 408 || (httpRes.StatusCode >= 500 && httpRes.StatusCode <= 599) {
-				log.Printf("[ERROR] HTTP Request failed: StatusCode %v, Retries: %v", httpRes.StatusCode, attempts)
+				slog.Error(fmt.Sprintf("HTTP Request failed: StatusCode %v, Retries: %v", httpRes.StatusCode, attempts))
 				continue
 			} else {
-				log.Printf("[ERROR] HTTP Request failed: StatusCode %v", httpRes.StatusCode)
-				log.Printf("[DEBUG] Exit from Do method")
+				slog.Error(fmt.Sprintf("HTTP Request failed: StatusCode %v", httpRes.StatusCode))
+				slog.Debug("Exit from Do method")
 				return res, fmt.Errorf("HTTP Request failed: StatusCode %v", httpRes.StatusCode)
 			}
 		}
@@ -222,7 +222,7 @@ func (client *Client) Do(req Req) (Res, error) {
 
 	errCode := res.Get("error.code").Str
 	if errCode != "" {
-		log.Printf("[ERROR] JSON error: %s", res.Raw)
+		slog.Error(fmt.Sprintf("JSON error: %s", res.Raw))
 		return res, fmt.Errorf("JSON error: %s", res.Raw)
 	}
 	return res, nil
@@ -295,17 +295,17 @@ func (client *Client) Login() error {
 			return err
 		}
 		if httpRes.StatusCode != 200 {
-			log.Printf("[ERROR] Authentication failed: StatusCode %v", httpRes.StatusCode)
+			slog.Error(fmt.Sprintf("Authentication failed: StatusCode %v", httpRes.StatusCode))
 			return fmt.Errorf("authentication failed, status code: %v", httpRes.StatusCode)
 		}
 		defer httpRes.Body.Close()
 		bodyBytes, _ := io.ReadAll(httpRes.Body)
 		if len(bodyBytes) > 0 {
 			if ok := client.Backoff(attempts); !ok {
-				log.Printf("[ERROR] Authentication failed: Invalid credentials")
+				slog.Error("Authentication failed: Invalid credentials")
 				return fmt.Errorf("authentication failed, invalid credentials")
 			} else {
-				log.Printf("[ERROR] Authentication failed: %s, retries: %v", err, attempts)
+				slog.Error(fmt.Sprintf("Authentication failed: %s, retries: %v", err, attempts))
 				continue
 			}
 		}
@@ -315,17 +315,17 @@ func (client *Client) Login() error {
 			return err
 		}
 		if httpRes.StatusCode != 200 {
-			log.Printf("[ERROR] Token retrieval failed: StatusCode %v", httpRes.StatusCode)
+			slog.Error(fmt.Sprintf("Token retrieval failed: StatusCode %v", httpRes.StatusCode))
 			return fmt.Errorf("authentication failed, token retrieval, status code: %v", httpRes.StatusCode)
 		}
 		defer httpRes.Body.Close()
 		token, _ := io.ReadAll(httpRes.Body)
 		if string(token) == "" {
-			log.Printf("[ERROR] Token retrieval failed: no token in payload")
+			slog.Error("Token retrieval failed: no token in payload")
 			return fmt.Errorf("authentication failed, no token in payload")
 		}
 		client.Token = string(token)
-		log.Printf("[DEBUG] Authentication successful")
+		slog.Debug("Authentication successful")
 		return nil
 	}
 }
@@ -343,9 +343,9 @@ func (client *Client) Authenticate() error {
 
 // Backoff waits following an exponential backoff algorithm
 func (client *Client) Backoff(attempts int) bool {
-	log.Printf("[DEBUG] Begining backoff method: attempts %v on %v", attempts, client.MaxRetries)
+	slog.Debug(fmt.Sprintf("Begining backoff method: attempts %v on %v", attempts, client.MaxRetries))
 	if attempts >= client.MaxRetries {
-		log.Printf("[DEBUG] Exit from backoff method with return value false")
+		slog.Debug("Exit from backoff method with return value false")
 		return false
 	}
 
@@ -359,8 +359,8 @@ func (client *Client) Backoff(attempts int) bool {
 	}
 	backoff = (rand.Float64()/2+0.5)*(backoff-min) + min
 	backoffDuration := time.Duration(backoff)
-	log.Printf("[TRACE] Starting sleeping for %v", backoffDuration.Round(time.Second))
+	slog.Debug(fmt.Sprintf("Starting sleeping for %v", backoffDuration.Round(time.Second)))
 	time.Sleep(backoffDuration)
-	log.Printf("[DEBUG] Exit from backoff method with return value true")
+	slog.Debug("Exit from backoff method with return value true")
 	return true
 }
