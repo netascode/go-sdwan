@@ -24,6 +24,7 @@ func testClient() Client {
 func authenticatedTestClient() Client {
 	client := testClient()
 	client.Token = "ABC"
+	client.SDWANVersion = "20.12.3"
 	return client
 }
 
@@ -49,6 +50,7 @@ func TestClientLogin(t *testing.T) {
 	// Successful login
 	gock.New(testURL).Post("/j_security_check").Reply(200)
 	gock.New(testURL).Get("/dataservice/client/token").Reply(200).BodyString("ABC")
+	gock.New(testURL).Get("/dataservice/client/about").Reply(200).JSON(map[string]string{"version": "20.12.3"})
 	assert.NoError(t, client.Login())
 
 	// Unsuccessful token retrieval
@@ -59,6 +61,15 @@ func TestClientLogin(t *testing.T) {
 	// Invalid HTTP status code
 	gock.New(testURL).Post("/j_security_check").Reply(405)
 	assert.Error(t, client.Login())
+}
+
+// TestClientGetSDWANVersion tests the Client::GetSDWANVersion method.
+func TestClientGetSDWANVersion(t *testing.T) {
+	defer gock.Off()
+	client := authenticatedTestClient()
+
+	// Version already known
+	assert.Equal(t, "20.12.3", client.SDWANVersion)
 }
 
 // TestClientGet tests the Client::Get method.
