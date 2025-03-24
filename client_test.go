@@ -24,7 +24,6 @@ func testClient() Client {
 func authenticatedTestClient() Client {
 	client := testClient()
 	client.Token = "ABC"
-	client.ManagerVersion = "20.12.3"
 	return client
 }
 
@@ -50,8 +49,8 @@ func TestClientLogin(t *testing.T) {
 	// Successful login
 	gock.New(testURL).Post("/j_security_check").Reply(200)
 	gock.New(testURL).Get("/dataservice/client/token").Reply(200).BodyString("ABC")
-	gock.New(testURL).Get("/dataservice/client/about").Reply(200).JSON(map[string]string{"version": "20.12.3"})
 	assert.NoError(t, client.Login())
+	assert.Equal(t, "ABC", client.Token)
 
 	// Unsuccessful token retrieval
 	gock.New(testURL).Post("/j_security_check").Reply(200)
@@ -68,7 +67,8 @@ func TestClientGetManagerVersion(t *testing.T) {
 	defer gock.Off()
 	client := authenticatedTestClient()
 
-	// Version already known
+	gock.New(testURL).Get("/dataservice/client/about").Reply(200).JSON(map[string]map[string]string{"data": {"version": "20.12.3"}})
+	assert.NoError(t, client.GetManagerVersion())
 	assert.Equal(t, "20.12.3", client.ManagerVersion)
 }
 

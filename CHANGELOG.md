@@ -1,3 +1,7 @@
+## 0.1.8 (unreleased)
+
+- Fix deadlock when retrieving version
+
 ## 0.1.7
 
 - Expose SD-WAN Manager version in client

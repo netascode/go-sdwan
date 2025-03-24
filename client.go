@@ -332,18 +332,43 @@ func (client *Client) Login() error {
 	}
 }
 
-// Login if no token available.
+// Login if no token available and try to retrieve version
 func (client *Client) Authenticate() error {
 	var err error
 	client.AuthenticationMutex.Lock()
 	if client.Token == "" {
 		err = client.Login()
 	}
-	if client.ManagerVersion == "" {
-		err = client.GetManagerVersion()
+	if err == nil && client.ManagerVersion == "" {
+		client.GetManagerVersion()
 	}
 	client.AuthenticationMutex.Unlock()
 	return err
+}
+
+// Get SDWAN Manager version
+func (client *Client) GetManagerVersion() error {
+	// If version is already known, no need to get it from SDWAN
+	if client.ManagerVersion != "" {
+		return nil
+	}
+
+	req := client.NewReq("GET", "/dataservice/client/about", nil)
+	res, err := client.Do(req)
+	if err != nil {
+		slog.Error(fmt.Sprintf("Failed to retrieve SDWAN Manager version: %s", err.Error()))
+		return fmt.Errorf("failed to retrieve SDWAN Manager version: %s", err.Error())
+	}
+
+	managerVersion := res.Get("data.version")
+	if !managerVersion.Exists() {
+		slog.Error("Failed to retrieve SDWAN Manager version: version not found in response")
+		return fmt.Errorf("failed to retrieve SDWAN Manager version: version not found in response")
+	}
+
+	client.ManagerVersion = managerVersion.String()
+
+	return nil
 }
 
 // Backoff waits following an exponential backoff algorithm
@@ -368,28 +393,4 @@ func (client *Client) Backoff(attempts int) bool {
 	time.Sleep(backoffDuration)
 	slog.Debug("Exit from backoff method with return value true")
 	return true
-}
-
-// Get SDWAN Version
-func (client *Client) GetManagerVersion() error {
-	// If version is already known, no need to get it from SDWAN
-	if client.ManagerVersion != "" {
-		return nil
-	}
-
-	res, err := client.Get("/dataservice/client/about")
-	if err != nil {
-		slog.Error(fmt.Sprintf("Failed to retrieve SDWAN Manager version: %s", err.Error()))
-		return fmt.Errorf("failed to retrieve SDWAN Manager version: %s", err.Error())
-	}
-
-	managerVersion := res.Get("version")
-	if !managerVersion.Exists() {
-		slog.Error("Failed to retrieve SDWAN Manager version: version not found in response")
-		return fmt.Errorf("failed to retrieve SDWAN Manager version: version not found in response")
-	}
-
-	client.ManagerVersion = managerVersion.String()
-
-	return nil
 }
