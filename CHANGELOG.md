@@ -1,4 +1,4 @@
-## 0.1.7 (unreleased)
+## 0.1.7
 
 - Expose SD-WAN Manager version in client
 - Switch to `slog` package for logging
