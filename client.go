@@ -50,8 +50,8 @@ type Client struct {
 	BackoffDelayFactor float64
 	// Authentication mutex
 	AuthenticationMutex *sync.Mutex
-	// SDWAN Version
-	SDWANVersion string
+	// SDWAN Manager Version
+	ManagerVersion string
 }
 
 // NewClient creates a new SDWAN HTTP client.
@@ -339,8 +339,8 @@ func (client *Client) Authenticate() error {
 	if client.Token == "" {
 		err = client.Login()
 	}
-	if client.SDWANVersion == "" {
-		err = client.GetSDWANVersion()
+	if client.ManagerVersion == "" {
+		err = client.GetManagerVersion()
 	}
 	client.AuthenticationMutex.Unlock()
 	return err
@@ -371,9 +371,9 @@ func (client *Client) Backoff(attempts int) bool {
 }
 
 // Get SDWAN Version
-func (client *Client) GetSDWANVersion() error {
+func (client *Client) GetManagerVersion() error {
 	// If version is already known, no need to get it from SDWAN
-	if client.SDWANVersion != "" {
+	if client.ManagerVersion != "" {
 		return nil
 	}
 
@@ -383,13 +383,13 @@ func (client *Client) GetSDWANVersion() error {
 		return fmt.Errorf("failed to retrieve SDWAN version: %s", err.Error())
 	}
 
-	sdwanVersion := res.Get("version")
-	if !sdwanVersion.Exists() {
+	managerVersion := res.Get("version")
+	if !managerVersion.Exists() {
 		log.Printf("[ERROR] Failed to retrieve SDWAN version: version not found in SDWAN responses")
 		return fmt.Errorf("failed to retrieve SDWAN version: version not found in SDWAN response")
 	}
 
-	client.SDWANVersion = sdwanVersion.String()
+	client.ManagerVersion = managerVersion.String()
 
 	return nil
 }
