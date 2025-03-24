@@ -1,3 +1,8 @@
+## 0.1.7 (unreleased)
+
+- Expose SD-WAN Manager version in client
+- Switch to `slog` package for logging
+
 ## 0.1.6
 
 - Add DeleteBody() function

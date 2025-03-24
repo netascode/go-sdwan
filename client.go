@@ -379,13 +379,13 @@ func (client *Client) GetManagerVersion() error {
 
 	res, err := client.Get("/dataservice/client/about")
 	if err != nil {
-		log.Printf("[ERROR] Failed to retrieve SDWAN Manager version: %s", err.Error())
+		slog.Error(fmt.Sprintf("Failed to retrieve SDWAN Manager version: %s", err.Error()))
 		return fmt.Errorf("failed to retrieve SDWAN Manager version: %s", err.Error())
 	}
 
 	managerVersion := res.Get("version")
 	if !managerVersion.Exists() {
-		log.Printf("[ERROR] Failed to retrieve SDWAN Manager version: version not found in response")
+		slog.Error("Failed to retrieve SDWAN Manager version: version not found in response")
 		return fmt.Errorf("failed to retrieve SDWAN Manager version: version not found in response")
 	}
 
