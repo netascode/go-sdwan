@@ -63,13 +63,13 @@ func TestClientLogin(t *testing.T) {
 	assert.Error(t, client.Login())
 }
 
-// TestClientGetSDWANVersion tests the Client::GetSDWANVersion method.
-func TestClientGetSDWANVersion(t *testing.T) {
+// TestClientGetManagerVersion tests the Client::GetManagerVersion method.
+func TestClientGetManagerVersion(t *testing.T) {
 	defer gock.Off()
 	client := authenticatedTestClient()
 
 	// Version already known
-	assert.Equal(t, "20.12.3", client.SDWANVersion)
+	assert.Equal(t, "20.12.3", client.ManagerVersion)
 }
 
 // TestClientGet tests the Client::Get method.
