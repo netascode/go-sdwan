@@ -24,7 +24,7 @@ func testClient() Client {
 func authenticatedTestClient() Client {
 	client := testClient()
 	client.Token = "ABC"
-	client.SDWANVersion = "20.12.3"
+	client.ManagerVersion = "20.12.3"
 	return client
 }
 
