@@ -1,4 +1,4 @@
-## 0.1.8 (unreleased)
+## 0.1.8
 
 - Fix deadlock when retrieving version
 
