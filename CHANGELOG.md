@@ -1,4 +1,4 @@
-## 0.1.9 (unreleased)
+## 0.1.9
 
 - Honor proxy settings (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` environment variables)
 
