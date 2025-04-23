@@ -1,3 +1,7 @@
+## 0.1.9 (unreleased)
+
+- Honor proxy settings (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` environment variables)
+
 ## 0.1.8
 
 - Fix deadlock when retrieving version
