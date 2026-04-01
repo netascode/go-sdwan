@@ -27,6 +27,12 @@ func authenticatedTestClient() Client {
 	return client
 }
 
+func tokenAuthTestClient() Client {
+	client, _ := NewClientToken(testURL, "ABC", true, MaxRetries(0))
+	gock.InterceptClient(client.HttpClient)
+	return client
+}
+
 // ErrReader implements the io.Reader interface and fails on Read.
 type ErrReader struct{}
 
@@ -211,4 +217,44 @@ func TestClientPut(t *testing.T) {
 		})
 	_, err = client.Put("/url", "{}")
 	assert.Error(t, err)
+}
+
+// TestNewClientToken tests the NewClientToken function.
+func TestNewClientToken(t *testing.T) {
+	client, _ := NewClientToken(testURL, "mytoken", true, RequestTimeout(120))
+	assert.Equal(t, "mytoken", client.ApiToken)
+	assert.Equal(t, "", client.Usr)
+	assert.Equal(t, "", client.Pwd)
+	assert.Equal(t, client.HttpClient.Timeout, 120*time.Second)
+}
+
+// TestClientTokenAuthGet tests that token auth uses Authorization Bearer header.
+func TestClientTokenAuthGet(t *testing.T) {
+	defer gock.Off()
+	client := tokenAuthTestClient()
+
+	// Mock the about endpoint for GetManagerVersion
+	gock.New(testURL).Get("/dataservice/client/about").Reply(200).JSON(map[string]map[string]string{"data": {"version": "20.12.3"}})
+
+	// Success - verify Bearer header is sent
+	gock.New(testURL).
+		Get("/dataservice/url").
+		MatchHeader("Authorization", "Bearer ABC").
+		Reply(200)
+	_, err := client.Get("/url")
+	assert.NoError(t, err)
+}
+
+// TestClientTokenAuthAuthenticate tests that Authenticate skips login when ApiToken is set.
+func TestClientTokenAuthAuthenticate(t *testing.T) {
+	defer gock.Off()
+	client := tokenAuthTestClient()
+
+	// Only mock about endpoint - login endpoints should NOT be called
+	gock.New(testURL).Get("/dataservice/client/about").Reply(200).JSON(map[string]map[string]string{"data": {"version": "20.12.3"}})
+
+	err := client.Authenticate()
+	assert.NoError(t, err)
+	assert.Equal(t, "", client.Token) // Token field stays empty, ApiToken is used instead
+	assert.Equal(t, "20.12.3", client.ManagerVersion)
 }

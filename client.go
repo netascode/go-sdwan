@@ -38,6 +38,8 @@ type Client struct {
 	Usr string
 	// Pwd is the SDWAN password.
 	Pwd string
+	// ApiToken is a pre-provisioned API token for bearer token authentication.
+	ApiToken string
 	// Insecure determines if insecure https connections are allowed.
 	Insecure bool
 	// Maximum number of retries
@@ -74,6 +76,40 @@ func NewClient(url, usr, pwd string, insecure bool, mods ...func(*Client)) (Clie
 		Url:                 url,
 		Usr:                 usr,
 		Pwd:                 pwd,
+		Insecure:            insecure,
+		MaxRetries:          DefaultMaxRetries,
+		BackoffMinDelay:     DefaultBackoffMinDelay,
+		BackoffMaxDelay:     DefaultBackoffMaxDelay,
+		BackoffDelayFactor:  DefaultBackoffDelayFactor,
+		AuthenticationMutex: &sync.Mutex{},
+	}
+
+	for _, mod := range mods {
+		mod(&client)
+	}
+	return client, nil
+}
+
+// NewClientToken creates a new SDWAN HTTP client using a pre-provisioned API token.
+// The token is sent as a Bearer token in the Authorization header, skipping the
+// username/password login flow.
+//
+//	client, _ := NewClientToken("vmanage1.cisco.com", "mytoken", true, RequestTimeout(120))
+func NewClientToken(url, apiToken string, insecure bool, mods ...func(*Client)) (Client, error) {
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: insecure}
+
+	cookieJar, _ := cookiejar.New(nil)
+	httpClient := http.Client{
+		Timeout:   60 * time.Second,
+		Transport: tr,
+		Jar:       cookieJar,
+	}
+
+	client := Client{
+		HttpClient:          &httpClient,
+		Url:                 url,
+		ApiToken:            apiToken,
 		Insecure:            insecure,
 		MaxRetries:          DefaultMaxRetries,
 		BackoffMinDelay:     DefaultBackoffMinDelay,
@@ -143,7 +179,11 @@ func (client Client) NewReq(method, uri string, body io.Reader, mods ...func(*Re
 //	res, _ := client.Do(req)
 func (client *Client) Do(req Req) (Res, error) {
 	// add token
-	req.HttpReq.Header.Add("X-XSRF-TOKEN", client.Token)
+	if client.ApiToken != "" {
+		req.HttpReq.Header.Add("Authorization", "Bearer "+client.ApiToken)
+	} else {
+		req.HttpReq.Header.Add("X-XSRF-TOKEN", client.Token)
+	}
 	// retain the request body across multiple attempts
 	var body []byte
 	if req.HttpReq.Body != nil {
@@ -335,7 +375,7 @@ func (client *Client) Login() error {
 func (client *Client) Authenticate() error {
 	var err error
 	client.AuthenticationMutex.Lock()
-	if client.Token == "" {
+	if client.ApiToken == "" && client.Token == "" {
 		err = client.Login()
 	}
 	if err == nil && client.ManagerVersion == "" {
