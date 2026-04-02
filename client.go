@@ -178,12 +178,11 @@ func (client Client) NewReq(method, uri string, body io.Reader, mods ...func(*Re
 //	req := client.NewReq("GET", "/admin/resourcegroup", nil)
 //	res, _ := client.Do(req)
 func (client *Client) Do(req Req) (Res, error) {
-	// add token
+	// add auth headers
 	if client.ApiToken != "" {
 		req.HttpReq.Header.Add("Authorization", "Bearer "+client.ApiToken)
-	} else {
-		req.HttpReq.Header.Add("X-XSRF-TOKEN", client.Token)
 	}
+	req.HttpReq.Header.Add("X-XSRF-TOKEN", client.Token)
 	// retain the request body across multiple attempts
 	var body []byte
 	if req.HttpReq.Body != nil {
@@ -375,14 +374,41 @@ func (client *Client) Login() error {
 func (client *Client) Authenticate() error {
 	var err error
 	client.AuthenticationMutex.Lock()
-	if client.ApiToken == "" && client.Token == "" {
-		err = client.Login()
+	if client.Token == "" {
+		if client.ApiToken != "" {
+			err = client.GetToken()
+		} else {
+			err = client.Login()
+		}
 	}
 	if err == nil && client.ManagerVersion == "" {
 		client.GetManagerVersion()
 	}
 	client.AuthenticationMutex.Unlock()
 	return err
+}
+
+// GetToken retrieves the XSRF token using API token authentication.
+func (client *Client) GetToken() error {
+	req := client.NewReq("GET", "/dataservice/client/token", nil)
+	req.HttpReq.Header.Add("Authorization", "Bearer "+client.ApiToken)
+	httpRes, err := client.HttpClient.Do(req.HttpReq)
+	if err != nil {
+		return err
+	}
+	defer httpRes.Body.Close()
+	if httpRes.StatusCode != 200 {
+		slog.Error(fmt.Sprintf("Token retrieval failed: StatusCode %v", httpRes.StatusCode))
+		return fmt.Errorf("authentication failed, token retrieval, status code: %v", httpRes.StatusCode)
+	}
+	token, _ := io.ReadAll(httpRes.Body)
+	if string(token) == "" {
+		slog.Error("Token retrieval failed: no token in payload")
+		return fmt.Errorf("authentication failed, no token in payload")
+	}
+	client.Token = string(token)
+	slog.Debug("Token retrieval successful")
+	return nil
 }
 
 // Get SDWAN Manager version

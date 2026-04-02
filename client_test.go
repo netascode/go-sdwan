@@ -228,33 +228,26 @@ func TestNewClientToken(t *testing.T) {
 	assert.Equal(t, client.HttpClient.Timeout, 120*time.Second)
 }
 
-// TestClientTokenAuthGet tests that token auth uses Authorization Bearer header.
+// TestClientTokenAuthGet tests that token auth sends both Authorization Bearer and X-XSRF-TOKEN headers.
 func TestClientTokenAuthGet(t *testing.T) {
 	defer gock.Off()
 	client := tokenAuthTestClient()
 
+	// Mock token retrieval for XSRF token
+	gock.New(testURL).
+		Get("/dataservice/client/token").
+		MatchHeader("Authorization", "Bearer ABC").
+		Reply(200).
+		BodyString("XYZ")
 	// Mock the about endpoint for GetManagerVersion
 	gock.New(testURL).Get("/dataservice/client/about").Reply(200).JSON(map[string]map[string]string{"data": {"version": "20.12.3"}})
 
-	// Success - verify Bearer header is sent
+	// Success - verify both headers are sent
 	gock.New(testURL).
 		Get("/dataservice/url").
 		MatchHeader("Authorization", "Bearer ABC").
+		MatchHeader("X-XSRF-TOKEN", "XYZ").
 		Reply(200)
 	_, err := client.Get("/url")
 	assert.NoError(t, err)
-}
-
-// TestClientTokenAuthAuthenticate tests that Authenticate skips login when ApiToken is set.
-func TestClientTokenAuthAuthenticate(t *testing.T) {
-	defer gock.Off()
-	client := tokenAuthTestClient()
-
-	// Only mock about endpoint - login endpoints should NOT be called
-	gock.New(testURL).Get("/dataservice/client/about").Reply(200).JSON(map[string]map[string]string{"data": {"version": "20.12.3"}})
-
-	err := client.Authenticate()
-	assert.NoError(t, err)
-	assert.Equal(t, "", client.Token) // Token field stays empty, ApiToken is used instead
-	assert.Equal(t, "20.12.3", client.ManagerVersion)
 }
