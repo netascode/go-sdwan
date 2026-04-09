@@ -20,7 +20,7 @@ package main
 import "github.com/netascode/go-sdwan"
 
 func main() {
-    client, _ := sdwan.NewClient("1.1.1.1", "user", "pwd", true)
+    client, _ := sdwan.NewClient("1.1.1.1", true, sdwan.WithLogin("user", "pwd"))
 
     res, _ := client.Get("/admin/resourcegroup")
     println(res.Get("0.id").String())
@@ -37,7 +37,7 @@ package main
 import "github.com/netascode/go-sdwan"
 
 func main() {
-    client, _ := sdwan.NewClientToken("1.1.1.1", "mytoken", true)
+    client, _ := sdwan.NewClient("1.1.1.1", true, sdwan.WithToken("mytoken"))
 
     res, _ := client.Get("/admin/resourcegroup")
     println(res.Get("0.id").String())

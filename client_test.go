@@ -16,7 +16,7 @@ const (
 )
 
 func testClient() Client {
-	client, _ := NewClient(testURL, "usr", "pwd", true, MaxRetries(0))
+	client, _ := NewClient(testURL, true, WithLogin("usr", "pwd"), MaxRetries(0))
 	gock.InterceptClient(client.HttpClient)
 	return client
 }
@@ -28,7 +28,7 @@ func authenticatedTestClient() Client {
 }
 
 func tokenAuthTestClient() Client {
-	client, _ := NewClientToken(testURL, "ABC", true, MaxRetries(0))
+	client, _ := NewClient(testURL, true, WithToken("ABC"), MaxRetries(0))
 	gock.InterceptClient(client.HttpClient)
 	return client
 }
@@ -43,8 +43,14 @@ func (r ErrReader) Read(buf []byte) (int, error) {
 
 // TestNewClient tests the NewClient function.
 func TestNewClient(t *testing.T) {
-	client, _ := NewClient(testURL, "usr", "pwd", true, RequestTimeout(120))
+	client, _ := NewClient(testURL, true, WithLogin("usr", "pwd"), RequestTimeout(120))
 	assert.Equal(t, client.HttpClient.Timeout, 120*time.Second)
+	assert.Equal(t, "usr", client.Usr)
+	assert.Equal(t, "pwd", client.Pwd)
+
+	// No auth method configured
+	_, err := NewClient(testURL, true)
+	assert.Error(t, err)
 }
 
 // TestClientLogin tests the Client::Login method.
@@ -219,9 +225,9 @@ func TestClientPut(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// TestNewClientToken tests the NewClientToken function.
+// TestNewClientToken tests the NewClient function with WithToken.
 func TestNewClientToken(t *testing.T) {
-	client, _ := NewClientToken(testURL, "mytoken", true, RequestTimeout(120))
+	client, _ := NewClient(testURL, true, WithToken("mytoken"), RequestTimeout(120))
 	assert.Equal(t, "mytoken", client.ApiToken)
 	assert.Equal(t, "", client.Usr)
 	assert.Equal(t, "", client.Pwd)

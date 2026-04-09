@@ -59,8 +59,9 @@ type Client struct {
 // NewClient creates a new SDWAN HTTP client.
 // Pass modifiers in to modify the behavior of the client, e.g.
 //
-//	client, _ := NewClient("vmanage1.cisco.com", "user", "password", true, RequestTimeout(120))
-func NewClient(url, usr, pwd string, insecure bool, mods ...func(*Client)) (Client, error) {
+//	client, _ := NewClient("vmanage1.cisco.com", true, WithLogin("user", "password"), RequestTimeout(120))
+//	client, _ := NewClient("vmanage1.cisco.com", true, WithToken("mytoken"))
+func NewClient(url string, insecure bool, mods ...func(*Client)) (Client, error) {
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: insecure}
 
@@ -74,8 +75,6 @@ func NewClient(url, usr, pwd string, insecure bool, mods ...func(*Client)) (Clie
 	client := Client{
 		HttpClient:          &httpClient,
 		Url:                 url,
-		Usr:                 usr,
-		Pwd:                 pwd,
 		Insecure:            insecure,
 		MaxRetries:          DefaultMaxRetries,
 		BackoffMinDelay:     DefaultBackoffMinDelay,
@@ -87,41 +86,28 @@ func NewClient(url, usr, pwd string, insecure bool, mods ...func(*Client)) (Clie
 	for _, mod := range mods {
 		mod(&client)
 	}
+
+	if client.ApiToken == "" && client.Usr == "" {
+		return client, fmt.Errorf("no authentication method configured, use WithLogin or WithToken")
+	}
+
 	return client, nil
 }
 
-// NewClientToken creates a new SDWAN HTTP client using a pre-provisioned API token.
-// The token is sent as a Bearer token in the Authorization header, skipping the
-// username/password login flow.
-//
-//	client, _ := NewClientToken("vmanage1.cisco.com", "mytoken", true, RequestTimeout(120))
-func NewClientToken(url, apiToken string, insecure bool, mods ...func(*Client)) (Client, error) {
-	tr := http.DefaultTransport.(*http.Transport).Clone()
-	tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: insecure}
-
-	cookieJar, _ := cookiejar.New(nil)
-	httpClient := http.Client{
-		Timeout:   60 * time.Second,
-		Transport: tr,
-		Jar:       cookieJar,
+// WithLogin configures username/password authentication.
+func WithLogin(usr, pwd string) func(*Client) {
+	return func(client *Client) {
+		client.Usr = usr
+		client.Pwd = pwd
 	}
+}
 
-	client := Client{
-		HttpClient:          &httpClient,
-		Url:                 url,
-		ApiToken:            apiToken,
-		Insecure:            insecure,
-		MaxRetries:          DefaultMaxRetries,
-		BackoffMinDelay:     DefaultBackoffMinDelay,
-		BackoffMaxDelay:     DefaultBackoffMaxDelay,
-		BackoffDelayFactor:  DefaultBackoffDelayFactor,
-		AuthenticationMutex: &sync.Mutex{},
+// WithToken configures API token authentication.
+// The token is sent as a Bearer token in the Authorization header.
+func WithToken(apiToken string) func(*Client) {
+	return func(client *Client) {
+		client.ApiToken = apiToken
 	}
-
-	for _, mod := range mods {
-		mod(&client)
-	}
-	return client, nil
 }
 
 // RequestTimeout modifies the HTTP request timeout from the default of 60 seconds.
