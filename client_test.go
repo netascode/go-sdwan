@@ -16,7 +16,7 @@ const (
 )
 
 func testClient() Client {
-	client, _ := NewClient(testURL, "usr", "pwd", true, MaxRetries(0))
+	client, _ := NewClient(testURL, true, WithLogin("usr", "pwd"), MaxRetries(0))
 	gock.InterceptClient(client.HttpClient)
 	return client
 }
@@ -24,6 +24,12 @@ func testClient() Client {
 func authenticatedTestClient() Client {
 	client := testClient()
 	client.Token = "ABC"
+	return client
+}
+
+func tokenAuthTestClient() Client {
+	client, _ := NewClient(testURL, true, WithToken("ABC"), MaxRetries(0))
+	gock.InterceptClient(client.HttpClient)
 	return client
 }
 
@@ -37,8 +43,14 @@ func (r ErrReader) Read(buf []byte) (int, error) {
 
 // TestNewClient tests the NewClient function.
 func TestNewClient(t *testing.T) {
-	client, _ := NewClient(testURL, "usr", "pwd", true, RequestTimeout(120))
+	client, _ := NewClient(testURL, true, WithLogin("usr", "pwd"), RequestTimeout(120))
 	assert.Equal(t, client.HttpClient.Timeout, 120*time.Second)
+	assert.Equal(t, "usr", client.Usr)
+	assert.Equal(t, "pwd", client.Pwd)
+
+	// No auth method configured
+	_, err := NewClient(testURL, true)
+	assert.Error(t, err)
 }
 
 // TestClientLogin tests the Client::Login method.
@@ -211,4 +223,37 @@ func TestClientPut(t *testing.T) {
 		})
 	_, err = client.Put("/url", "{}")
 	assert.Error(t, err)
+}
+
+// TestNewClientToken tests the NewClient function with WithToken.
+func TestNewClientToken(t *testing.T) {
+	client, _ := NewClient(testURL, true, WithToken("mytoken"), RequestTimeout(120))
+	assert.Equal(t, "mytoken", client.ApiToken)
+	assert.Equal(t, "", client.Usr)
+	assert.Equal(t, "", client.Pwd)
+	assert.Equal(t, client.HttpClient.Timeout, 120*time.Second)
+}
+
+// TestClientTokenAuthGet tests that token auth sends both Authorization Bearer and X-XSRF-TOKEN headers.
+func TestClientTokenAuthGet(t *testing.T) {
+	defer gock.Off()
+	client := tokenAuthTestClient()
+
+	// Mock token retrieval for XSRF token
+	gock.New(testURL).
+		Get("/dataservice/client/token").
+		MatchHeader("Authorization", "Bearer ABC").
+		Reply(200).
+		BodyString("XYZ")
+	// Mock the about endpoint for GetManagerVersion
+	gock.New(testURL).Get("/dataservice/client/about").Reply(200).JSON(map[string]map[string]string{"data": {"version": "20.12.3"}})
+
+	// Success - verify both headers are sent
+	gock.New(testURL).
+		Get("/dataservice/url").
+		MatchHeader("Authorization", "Bearer ABC").
+		MatchHeader("X-XSRF-TOKEN", "XYZ").
+		Reply(200)
+	_, err := client.Get("/url")
+	assert.NoError(t, err)
 }

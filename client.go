@@ -38,6 +38,8 @@ type Client struct {
 	Usr string
 	// Pwd is the SDWAN password.
 	Pwd string
+	// ApiToken is a pre-provisioned API token for bearer token authentication.
+	ApiToken string
 	// Insecure determines if insecure https connections are allowed.
 	Insecure bool
 	// Maximum number of retries
@@ -57,8 +59,9 @@ type Client struct {
 // NewClient creates a new SDWAN HTTP client.
 // Pass modifiers in to modify the behavior of the client, e.g.
 //
-//	client, _ := NewClient("vmanage1.cisco.com", "user", "password", true, RequestTimeout(120))
-func NewClient(url, usr, pwd string, insecure bool, mods ...func(*Client)) (Client, error) {
+//	client, _ := NewClient("vmanage1.cisco.com", true, WithLogin("user", "password"), RequestTimeout(120))
+//	client, _ := NewClient("vmanage1.cisco.com", true, WithToken("mytoken"))
+func NewClient(url string, insecure bool, mods ...func(*Client)) (Client, error) {
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: insecure}
 
@@ -72,8 +75,6 @@ func NewClient(url, usr, pwd string, insecure bool, mods ...func(*Client)) (Clie
 	client := Client{
 		HttpClient:          &httpClient,
 		Url:                 url,
-		Usr:                 usr,
-		Pwd:                 pwd,
 		Insecure:            insecure,
 		MaxRetries:          DefaultMaxRetries,
 		BackoffMinDelay:     DefaultBackoffMinDelay,
@@ -85,7 +86,28 @@ func NewClient(url, usr, pwd string, insecure bool, mods ...func(*Client)) (Clie
 	for _, mod := range mods {
 		mod(&client)
 	}
+
+	if client.ApiToken == "" && client.Usr == "" {
+		return client, fmt.Errorf("no authentication method configured, use WithLogin or WithToken")
+	}
+
 	return client, nil
+}
+
+// WithLogin configures username/password authentication.
+func WithLogin(usr, pwd string) func(*Client) {
+	return func(client *Client) {
+		client.Usr = usr
+		client.Pwd = pwd
+	}
+}
+
+// WithToken configures API token authentication.
+// The token is sent as a Bearer token in the Authorization header.
+func WithToken(apiToken string) func(*Client) {
+	return func(client *Client) {
+		client.ApiToken = apiToken
+	}
 }
 
 // RequestTimeout modifies the HTTP request timeout from the default of 60 seconds.
@@ -142,7 +164,10 @@ func (client Client) NewReq(method, uri string, body io.Reader, mods ...func(*Re
 //	req := client.NewReq("GET", "/admin/resourcegroup", nil)
 //	res, _ := client.Do(req)
 func (client *Client) Do(req Req) (Res, error) {
-	// add token
+	// add auth headers
+	if client.ApiToken != "" {
+		req.HttpReq.Header.Add("Authorization", "Bearer "+client.ApiToken)
+	}
 	req.HttpReq.Header.Add("X-XSRF-TOKEN", client.Token)
 	// retain the request body across multiple attempts
 	var body []byte
@@ -336,13 +361,40 @@ func (client *Client) Authenticate() error {
 	var err error
 	client.AuthenticationMutex.Lock()
 	if client.Token == "" {
-		err = client.Login()
+		if client.ApiToken != "" {
+			err = client.GetToken()
+		} else {
+			err = client.Login()
+		}
 	}
 	if err == nil && client.ManagerVersion == "" {
 		client.GetManagerVersion()
 	}
 	client.AuthenticationMutex.Unlock()
 	return err
+}
+
+// GetToken retrieves the XSRF token using API token authentication.
+func (client *Client) GetToken() error {
+	req := client.NewReq("GET", "/dataservice/client/token", nil)
+	req.HttpReq.Header.Add("Authorization", "Bearer "+client.ApiToken)
+	httpRes, err := client.HttpClient.Do(req.HttpReq)
+	if err != nil {
+		return err
+	}
+	defer httpRes.Body.Close()
+	if httpRes.StatusCode != 200 {
+		slog.Error(fmt.Sprintf("Token retrieval failed: StatusCode %v", httpRes.StatusCode))
+		return fmt.Errorf("authentication failed, token retrieval, status code: %v", httpRes.StatusCode)
+	}
+	token, _ := io.ReadAll(httpRes.Body)
+	if string(token) == "" {
+		slog.Error("Token retrieval failed: no token in payload")
+		return fmt.Errorf("authentication failed, no token in payload")
+	}
+	client.Token = string(token)
+	slog.Debug("Token retrieval successful")
+	return nil
 }
 
 // Get SDWAN Manager version

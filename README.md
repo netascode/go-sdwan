@@ -20,7 +20,24 @@ package main
 import "github.com/netascode/go-sdwan"
 
 func main() {
-    client, _ := sdwan.NewClient("1.1.1.1", "user", "pwd", true)
+    client, _ := sdwan.NewClient("1.1.1.1", true, sdwan.WithLogin("user", "pwd"))
+
+    res, _ := client.Get("/admin/resourcegroup")
+    println(res.Get("0.id").String())
+}
+```
+
+### Token Authentication
+
+Instead of username/password, you can authenticate with a pre-provisioned API token:
+
+```go
+package main
+
+import "github.com/netascode/go-sdwan"
+
+func main() {
+    client, _ := sdwan.NewClient("1.1.1.1", true, sdwan.WithToken("mytoken"))
 
     res, _ := client.Get("/admin/resourcegroup")
     println(res.Get("0.id").String())
