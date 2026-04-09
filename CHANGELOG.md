@@ -1,4 +1,4 @@
-## Unreleased
+## 0.2.0
 
 - BREAKING CHANGE: Add support for API token autentication
 
