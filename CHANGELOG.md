@@ -1,3 +1,7 @@
+## Unreleased
+
+- BREAKING CHANGE: Add support for API token autentication
+
 ## 0.1.9
 
 - Honor proxy settings (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` environment variables)
